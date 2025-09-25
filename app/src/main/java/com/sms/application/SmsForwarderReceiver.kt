@@ -3,7 +3,10 @@ package com.sms.application
 import android.annotation.SuppressLint
 import android.app.PendingIntent
 import android.content.BroadcastReceiver
+import android.content.ClipboardManager
 import android.content.Context
+import android.content.Context.CLIPBOARD_SERVICE
+import android.content.ClipData
 import android.content.Intent
 import android.os.Build
 import android.telephony.SmsManager
@@ -11,6 +14,8 @@ import android.telephony.SubscriptionManager
 import android.util.Log
 import android.widget.Toast
 import androidx.annotation.RequiresApi
+import androidx.core.app.NotificationManagerCompat
+import androidx.core.content.ContextCompat.getSystemService
 
 class SmsForwarderReceiver : BroadcastReceiver() {
     @SuppressLint("ObsoleteSdkInt")
@@ -20,6 +25,7 @@ class SmsForwarderReceiver : BroadcastReceiver() {
 
         when (action) {
             "sms.action.ACTION_SENT" -> {
+                // Xử lý trạng thái gửi SMS
                 when (resultCode) {
                     SmsManager.RESULT_ERROR_GENERIC_FAILURE -> {
                         Log.e("[DEBUG]", "SMS gửi thất bại: Lỗi chung")
@@ -65,10 +71,7 @@ class SmsForwarderReceiver : BroadcastReceiver() {
                         context,
                         0,
                         Intent("sms.action.ACTION_SENT").apply {
-                            putExtra(
-                                "sms_content",
-                                smsContent
-                            )
+                            putExtra("sms_content", smsContent)
                         },
                         PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
                     )
@@ -101,7 +104,32 @@ class SmsForwarderReceiver : BroadcastReceiver() {
                     Toast.makeText(context, "Gửi tin nhắn thất bại!", Toast.LENGTH_SHORT).show()
                 }
             }
+
+            "sms.action.COPY_OTP" -> {
+                val smsContent = intent.getStringExtra("sms_content")
+                val notificationId = intent.getIntExtra("notification_id", -1)
+
+                if (smsContent.isNullOrEmpty() || notificationId == -1) {
+                    Log.e("[DEBUG]", "COPY_OTP thiếu thông tin")
+                    return
+                }
+
+                // Cancel auto-send task
+                AutoSendManager.cancel("auto_send_$notificationId")
+
+                // Cancel notification
+                NotificationManagerCompat.from(context).cancel(notificationId)
+
+                // Copy OTP vào clipboard
+                val otpCode = AutoSendManager.extractOTP(smsContent)
+                val clipboard = context.getSystemService(CLIPBOARD_SERVICE) as ClipboardManager
+                val clip = ClipData.newPlainText("OTP Code", otpCode)
+                clipboard.setPrimaryClip(clip)
+
+                Toast.makeText(context, "Đã sao chép OTP vào clipboard!", Toast.LENGTH_SHORT).show()
+
+                Log.i("[DEBUG]", "OTP copied and auto-send canceled for notificationId=$notificationId")
+            }
         }
     }
-
 }

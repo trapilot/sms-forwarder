@@ -3,12 +3,13 @@ package com.sms.application
 import android.app.Activity
 import android.content.ClipData
 import android.content.ClipboardManager
-import android.os.Bundle
-import android.widget.Button
-import android.widget.TextView
+import android.content.Context
 import android.content.Intent
+import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.widget.Button
+import android.widget.TextView
 
 class MessageDialogActivity : Activity() {
 
@@ -21,6 +22,12 @@ class MessageDialogActivity : Activity() {
 
         val smsContent = intent.getStringExtra("sms_content") ?: ""
         val phoneNumber = intent.getStringExtra("phone_number") ?: "Unknown"
+        val notificationId = intent.getStringExtra("notification_id") ?: ""
+
+        // Cancel auto-send if opened from notification
+        if (notificationId.isNotEmpty()) {
+            AutoSendManager.cancel("auto_send_$notificationId")
+        }
 
         val messageTextView = findViewById<TextView>(R.id.messageTextView)
         messageTextView.text = "Bạn có muốn gửi tới số điện thoại: $phoneNumber?"
@@ -28,12 +35,12 @@ class MessageDialogActivity : Activity() {
         val yesButton = findViewById<Button>(R.id.btnYes)
         val noButton = findViewById<Button>(R.id.btnNo)
 
-        // Runnable automatically selects "Yes" after xx seconds
+        // Runnable automatically selects "Yes" after 5 seconds
         autoSendRunnable = Runnable {
             forwardSMS(phoneNumber, smsContent)
             finish()
         }
-        handler.postDelayed(autoSendRunnable!!, 5_000) // 10s
+        handler.postDelayed(autoSendRunnable!!, 5000)
 
         yesButton.setOnClickListener {
             cancelAutoSend()
@@ -67,19 +74,10 @@ class MessageDialogActivity : Activity() {
     }
 
     private fun copyToClipboard(smsContent: String) {
-        val clipboard = getSystemService(CLIPBOARD_SERVICE) as ClipboardManager
-        val otpCode = extractOTP(smsContent)
+        val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        val otpCode = AutoSendManager.extractOTP(smsContent)
 
         val clip = ClipData.newPlainText("OTP", otpCode)
         clipboard.setPrimaryClip(clip)
-    }
-
-    private fun extractOTP(smsContent: String): String {
-        val numberRegex = "\\d+".toRegex()
-        val allNumberBlocks = numberRegex.findAll(smsContent).map { it.value }.toList()
-
-        val otpCandidate = allNumberBlocks.find { it.length in 4..6 }
-
-        return otpCandidate ?: "NA"
     }
 }
